@@ -19,7 +19,7 @@ import base64
 UPLOAD_FOLDER = 'uploads'
 OUTPUT_FOLDER = 'outputs'
 ALLOWED_EXTENSIONS = {'nii', 'nii.gz'}
-MODEL_WEIGHTS_PATH = os.path.join('model', 'Rat&Mouse_LV_RN34_best.pth') # Path to your model
+MODEL_WEIGHTS_PATH = os.path.join('model', 'EFB1_e50_best.pth') # Path to your model
 
 # --- APP SETUP ---
 app = Flask(__name__, static_folder='static')
@@ -597,4 +597,5 @@ def get_volume_info(filename):
 
 
 if __name__ == '__main__':
+
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
