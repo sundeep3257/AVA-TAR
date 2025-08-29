@@ -28,7 +28,7 @@ def load_model(model_weights_path):
                 raise FileNotFoundError(f"Model weights file not found at: {model_weights_path}")
 
             MODEL = smp.UnetPlusPlus(
-                encoder_name="resnet34",
+                encoder_name="efficientnet-b1",
                 encoder_weights=None,
                 in_channels=5,
                 classes=1,
@@ -178,4 +178,5 @@ def run_segmentation_pipeline(input_filepath, output_filepath, progress_callback
     if os.path.exists(intermediate_mask_path):
         os.remove(intermediate_mask_path)
     if progress_callback: progress_callback(100)
+
     return True, "Segmentation successful."
