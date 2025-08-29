@@ -33,7 +33,7 @@ def load_model(model_weights_path):
                 in_channels=5,
                 classes=1,
             ).to(DEVICE)
-            MODEL.load_state_dict(torch.load(model_weights_path, map_location=DEVICE))
+            MODEL.load_state_dict(torch.load(model_weights_path, map_location=DEVICE, weights_only=False))
             MODEL.eval()  # Set model to evaluation mode
             print("✅ Model loaded successfully.")
         except Exception as e:
@@ -180,3 +180,4 @@ def run_segmentation_pipeline(input_filepath, output_filepath, progress_callback
     if progress_callback: progress_callback(100)
 
     return True, "Segmentation successful."
+
