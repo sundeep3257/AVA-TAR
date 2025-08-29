@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Processing - AVA-TAR</title>
+    <style>
+        :root {
+            --primary: #120f3cff;
+            --accent: #4d8addff;
+            --light: #cae7f8ff;
+            --white: #fff;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card {
+            background: var(--white);
+            border-radius: 18px;
+            box-shadow: 0 8px 32px rgba(18,15,60,0.18);
+            padding: 40px 32px 32px 32px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+        }
+        .logo {
+            margin-bottom: 0.2em;
+        }
+        .logo img {
+            max-width: 350px;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+        .subtitle {
+            font-size: 1rem;
+            color: var(--accent);
+            margin-bottom: 1.2em;
+            font-weight: 500;
+        }
+        .progress-container {
+            width: 100%;
+            background: var(--light);
+            border-radius: 8px;
+            margin: 2em 0 1em 0;
+            height: 32px;
+            box-shadow: 0 2px 8px rgba(77,138,221,0.08);
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--primary));
+            width: 0%;
+            border-radius: 8px 0 0 8px;
+            transition: width 0.4s cubic-bezier(.4,2,.6,1);
+            color: var(--white);
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .progress-label {
+            margin-top: 1em;
+            color: var(--primary);
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">
+            <img src="{{ url_for('static', filename='graphics/AVATAR_logo.png') }}" alt="AVA-TAR Logo">
+        </div>
+        <div class="subtitle">Automated Ventricle Assessment via Three-dimensional Anatomical Reconstruction</div>
+        <div class="progress-container">
+            <div class="progress-bar" id="progress-bar">0%</div>
+        </div>
+        <div class="progress-label" id="progress-label">Starting segmentation...</div>
+    </div>
+    <script>
+        const taskId = "{{ task_id }}";
+        const outputFilename = "{{ output_filename }}";
+        function pollProgress() {
+            fetch(`/progress/${taskId}`)
+                .then(response => response.json())
+                .then(data => {
+                    let prog = data.progress;
+                    if (prog < 0) {
+                        document.getElementById('progress-label').textContent = 'An error occurred during segmentation.';
+                        document.getElementById('progress-bar').style.background = '#b30000';
+                        document.getElementById('progress-bar').textContent = 'Error';
+                        return;
+                    }
+                    document.getElementById('progress-bar').style.width = prog + '%';
+                    document.getElementById('progress-bar').textContent = prog + '%';
+                    if (prog < 100) {
+                        let label = 'Processing...';
+                        if (prog < 30) label = 'Resizing input...';
+                        else if (prog < 50) label = 'Running segmentation...';
+                        else if (prog < 80) label = 'Post-processing mask...';
+                        else if (prog < 100) label = 'Finalizing...';
+                        document.getElementById('progress-label').textContent = label;
+                        setTimeout(pollProgress, 1000);
+                    } else {
+                        document.getElementById('progress-label').textContent = 'Segmentation complete! Redirecting...';
+                        setTimeout(() => {
+                            window.location.href = `/result/${outputFilename}`;
+                        }, 1200);
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('progress-label').textContent = 'Lost connection to server.';
+                });
+        }
+        pollProgress();
+    </script>
+</body>
+</html> 

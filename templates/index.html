@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AVA-TAR</title>
+    <style>
+        :root {
+            --primary: #120f3cff;
+            --accent: #4d8addff;
+            --light: #cae7f8ff;
+            --white: #fff;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card {
+            background: var(--white);
+            border-radius: 18px;
+            box-shadow: 0 8px 32px rgba(18,15,60,0.18);
+            padding: 40px 32px 32px 32px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+        }
+        .logo {
+            margin-bottom: 0.2em;
+        }
+        .logo img {
+            max-width: 450px;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+        .subtitle {
+            font-size: 1.05rem;
+            color: var(--accent);
+            margin-bottom: 1.5em;
+            font-weight: 500;
+        }
+        .desc {
+            color: var(--primary);
+            margin-bottom: 1.5em;
+        }
+        .upload-form {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            align-items: center;
+        }
+        input[type="file"] {
+            border: 2px dashed var(--accent);
+            background: var(--light);
+            color: var(--primary);
+            padding: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        input[type="file"]:focus {
+            border-color: var(--primary);
+        }
+        input[type="submit"] {
+            background: var(--accent);
+            color: var(--white);
+            padding: 14px 0;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 2px 8px rgba(77,138,221,0.08);
+            transition: background 0.2s;
+        }
+        input[type="submit"]:hover {
+            background: var(--primary);
+        }
+        .flashes {
+            list-style: none;
+            padding: 0;
+            margin-bottom: 1em;
+        }
+        .flashes li {
+            background: #ffe6e6;
+            color: #b30000;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            border: 1px solid #ffcccc;
+        }
+        #loader {
+            display: none;
+            margin-top: 24px;
+        }
+        .spinner {
+            border: 6px solid var(--light);
+            border-top: 6px solid var(--accent);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">
+            <img src="{{ url_for('static', filename='graphics/AVATAR_logo.png') }}" alt="AVA-TAR Logo">
+        </div>
+        <div class="subtitle">Automated Ventricle Assessment via Three-dimensional Anatomical Reconstruction</div>
+        <div class="desc">Upload a <b>NIfTI</b> file (<code>.nii</code> or <code>.nii.gz</code>) to generate a 3D segmentation mask of the brain's ventricles.</div>
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <ul class=flashes>
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+        <form method="post" enctype="multipart/form-data" class="upload-form" onsubmit="showLoader()">
+            <input type="file" name="file" accept=".nii,.nii.gz" required>
+            <input type="submit" value="Upload & Segment">
+        </form>
+        <div id="loader">
+            <div class="spinner"></div>
+            <div style="color:var(--accent);font-weight:500;">Processing your file... This may take a moment.</div>
+        </div>
+    </div>
+    <script>
+        function showLoader() {
+            document.getElementById('loader').style.display = 'block';
+        }
+    </script>
+</body>
+</html>

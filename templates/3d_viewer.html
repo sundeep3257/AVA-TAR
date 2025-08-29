@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Ventricle Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            background: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #viewer { 
+            width: 100%; 
+            height: 100vh; 
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255,255,255,0.9);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 1000;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255,255,255,0.9);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 1000;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <strong>3D Ventricle Viewer</strong><br>
+        <span id="mesh-info">Loading...</span><br>
+        <span id="controls">Mouse: Rotate | Scroll: Zoom | Right-click: Pan</span>
+    </div>
+    
+    <div id="loading">
+        <div class="spinner"></div>
+        <div>Loading 3D reconstruction...</div>
+    </div>
+    
+    <div id="viewer"></div>
+    
+    <script>
+        let scene, camera, renderer, controls, mesh;
+        let wireframeMode = false;
+        
+        // Initialize Three.js scene
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f0f0);
+            
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 5);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('viewer').appendChild(renderer.domElement);
+            
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 10, 5);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+            
+            // Add axes helper
+            const axesHelper = new THREE.AxesHelper(2);
+            scene.add(axesHelper);
+            
+            // Load mesh data
+            loadMeshData();
+            
+            // Animation loop
+            animate();
+        }
+        
+        function loadMeshData() {
+            // Get mesh filename from URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const meshFile = urlParams.get('mesh_file');
+            
+            if (meshFile) {
+                // Fetch mesh data from server
+                fetch(`/get_mesh_data/${meshFile}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        createMesh(data.vertices, data.faces, data.color);
+                    })
+                    .catch(error => {
+                        console.error('Error loading mesh data:', error);
+                        showError('Error loading mesh data: ' + error.message);
+                    });
+            } else {
+                // Create a simple placeholder mesh for demonstration
+                createPlaceholderMesh();
+            }
+        }
+        
+        function createMesh(vertices, faces, color = '#0085be') {
+            const geometry = new THREE.BufferGeometry();
+            
+            // Convert vertices to Float32Array
+            const vertexArray = new Float32Array(vertices.flat());
+            geometry.setAttribute('position', new THREE.BufferAttribute(vertexArray, 3));
+            
+            // Convert faces to indices
+            const indices = [];
+            for (let i = 0; i < faces.length; i++) {
+                indices.push(faces[i][0], faces[i][1], faces[i][2]);
+            }
+            geometry.setIndex(indices);
+            
+            // Compute normals
+            geometry.computeVertexNormals();
+            
+            // Create material with specified color
+            const material = new THREE.MeshPhongMaterial({
+                color: color,
+                transparent: true,
+                opacity: 0.8,
+                side: THREE.DoubleSide
+            });
+            
+            // Create mesh
+            mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            
+            // Center and scale the mesh
+            geometry.computeBoundingBox();
+            const box = geometry.boundingBox;
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scale = 2 / maxDim;
+            
+            mesh.position.sub(center.multiplyScalar(scale));
+            mesh.scale.setScalar(scale);
+            
+            scene.add(mesh);
+            
+            // Update info
+            document.getElementById('mesh-info').textContent = 
+                `Vertices: ${vertices.length} | Faces: ${faces.length}`;
+            
+            // Hide loading
+            document.getElementById('loading').style.display = 'none';
+        }
+        
+        function createPlaceholderMesh() {
+            // Create a simple sphere as placeholder
+            const geometry = new THREE.SphereGeometry(1, 32, 32);
+            const material = new THREE.MeshPhongMaterial({
+                color: '#0085be',
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            
+            scene.add(mesh);
+            
+            // Update info
+            document.getElementById('mesh-info').textContent = 
+                'Placeholder mesh (sphere)';
+            
+            // Hide loading
+            document.getElementById('loading').style.display = 'none';
+        }
+        
+        function showError(message) {
+            document.getElementById('loading').innerHTML = 
+                `<div style="color: red;">${message}</div>`;
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        function resetView() {
+            camera.position.set(0, 0, 5);
+            controls.reset();
+        }
+        
+        function toggleWireframe() {
+            if (mesh) {
+                wireframeMode = !wireframeMode;
+                mesh.material.wireframe = wireframeMode;
+            }
+        }
+        
+        function screenshot() {
+            renderer.render(scene, camera);
+            const canvas = renderer.domElement;
+            const link = document.createElement('a');
+            link.download = 'ventricle_3d.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', onWindowResize, false);
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // Handle messages from parent window
+        window.addEventListener('message', function(event) {
+            if (event.data.action === 'reset') {
+                resetView();
+            } else if (event.data.action === 'wireframe') {
+                toggleWireframe();
+            } else if (event.data.action === 'screenshot') {
+                screenshot();
+            } else if (event.data.action === 'updateColor') {
+                updateMeshColor(event.data.color);
+            }
+        });
+        
+        function updateMeshColor(color) {
+            if (mesh && mesh.material) {
+                mesh.material.color.setHex(parseInt(color.replace('#', ''), 16));
+            }
+        }
+        
+        // Initialize when page loads
+        window.onload = init;
+    </script>
+</body>
+</html>

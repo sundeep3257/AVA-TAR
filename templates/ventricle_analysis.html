@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ventricle Analysis - AVA-TAR</title>
+    <style>
+        :root {
+            --primary: #120f3cff;
+            --accent: #4d8addff;
+            --light: #cae7f8ff;
+            --white: #fff;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: var(--white);
+            letter-spacing: 2px;
+            margin-bottom: 0.2em;
+        }
+        .subtitle {
+            font-size: 1rem;
+            color: var(--light);
+            margin-bottom: 1.2em;
+            font-weight: 500;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: var(--white);
+            border-radius: 18px;
+            box-shadow: 0 8px 32px rgba(18,15,60,0.18);
+            padding: 30px;
+        }
+        .analysis-section {
+            margin-bottom: 30px;
+        }
+        h1 {
+            color: var(--accent);
+            font-size: 1.8rem;
+            margin-bottom: 0.7em;
+            text-align: center;
+        }
+        h2 {
+            color: var(--primary);
+            font-size: 1.3rem;
+            margin-bottom: 0.5em;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--accent);
+        }
+        .spinner {
+            border: 6px solid var(--light);
+            border-top: 6px solid var(--accent);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .control-button {
+            background: var(--accent);
+            color: var(--white);
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .control-button:hover {
+            background: var(--primary);
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: var(--accent);
+            font-weight: 500;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .back-link:hover {
+            color: var(--primary);
+        }
+        .viewer-container {
+            width: 100%;
+            height: 600px;
+            border: 2px solid var(--accent);
+            border-radius: 8px;
+            background: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .error-message {
+            color: #b30000;
+            background: #ffe6e6;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #ffcccc;
+            text-align: center;
+        }
+        
+                 .parameters-section {
+             background: linear-gradient(135deg, #ffffff 0%, #e3f2fd 100%);
+             border: 2px solid var(--accent);
+             border-radius: 12px;
+             padding: 25px;
+             margin-bottom: 25px;
+             text-align: center;
+         }
+        
+                 .parameters-section h3 {
+             color: var(--primary);
+             font-size: 1.2rem;
+             margin-bottom: 20px;
+             font-weight: 700;
+         }
+        
+                 .parameter-controls {
+             display: flex;
+             flex-direction: column;
+             gap: 20px;
+             max-width: 600px;
+             margin: 0 auto;
+         }
+        
+                 .parameter-group {
+             display: flex;
+             flex-direction: column;
+             gap: 8px;
+             background: rgba(255, 255, 255, 0.8);
+             padding: 15px;
+             border-radius: 8px;
+             border: 1px solid rgba(77, 138, 221, 0.2);
+         }
+        
+        .parameter-group label {
+            font-weight: 600;
+            color: var(--primary);
+            font-size: 0.9rem;
+        }
+        
+        .parameter-group input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .parameter-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+        }
+        
+        .parameter-group input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            border: none;
+        }
+        
+        .parameter-group span {
+            font-weight: 600;
+            color: var(--accent);
+            font-size: 0.9rem;
+        }
+        
+        .parameter-group small {
+            color: #666;
+            font-size: 0.8rem;
+            line-height: 1.3;
+        }
+        
+        .parameter-group input[type="color"] {
+            width: 60px;
+            height: 30px;
+            border: 2px solid var(--accent);
+            border-radius: 4px;
+            cursor: pointer;
+            background: none;
+            padding: 0;
+            margin: 0 auto;
+            display: block;
+        }
+        
+        .parameter-group input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        
+        .parameter-group input[type="color"]::-webkit-color-swatch {
+            border: none;
+            border-radius: 2px;
+        }
+        
+                 .metrics-section {
+             background: linear-gradient(135deg, #ffffff 0%, #e3f2fd 100%);
+             border: 2px solid var(--accent);
+             border-radius: 12px;
+             padding: 25px;
+             margin-bottom: 25px;
+             text-align: center;
+         }
+        
+        .metrics-section h3 {
+            color: var(--primary);
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+        
+        .metrics-loading {
+            text-align: center;
+            padding: 20px;
+            color: var(--accent);
+        }
+        
+        .metrics-loading .spinner {
+            width: 32px;
+            height: 32px;
+            border-width: 4px;
+        }
+        
+        .metrics-info {
+            display: flex;
+            justify-content: center;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 1000px;
+        }
+        
+        .metric-card {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(77, 138, 221, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(77, 138, 221, 0.2);
+        }
+        
+        .volume-card {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(77, 138, 221, 0.3);
+        }
+        
+        
+        
+        .metric-title {
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 1rem;
+            margin-bottom: 8px;
+        }
+        
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+        
+        .metric-unit {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+        
+        .metric-details {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-bottom: 10px;
+            text-align: left;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(77, 138, 221, 0.2);
+        }
+        
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: var(--primary);
+            font-size: 0.8rem;
+        }
+        
+        .detail-value {
+            font-weight: 500;
+            color: var(--accent);
+            font-size: 0.8rem;
+        }
+        
+        .metric-description {
+            font-size: 0.8rem;
+            color: #666;
+            line-height: 1.3;
+        }
+        
+        .toggle-button {
+            background: var(--accent);
+            color: var(--white);
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .toggle-button:hover {
+            background: var(--primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">AVA-TAR</div>
+        <div class="subtitle">Automated Ventricle Assessment via Three-dimensional Anatomical Reconstruction</div>
+    </div>
+    
+    <div class="container">
+        <h1>3D Ventricle Analysis</h1>
+        
+                 <div class="analysis-section">
+             
+                          <!-- Combined Volume and Morphology Information -->
+              <div class="metrics-section">
+                  <h3>Morphology Assessment</h3>
+                 <div id="metrics-loading" class="metrics-loading">
+                     <div class="spinner"></div>
+                     <p>Calculating metrics...</p>
+                 </div>
+                 <div id="metrics-info" class="metrics-info" style="display: none;">
+                                           <div class="metrics-grid">
+                          <div class="metric-card volume-card">
+                              <div class="metric-title">Volume</div>
+                              <div class="metric-value" id="volume-value">0.00</div>
+                              <div class="metric-unit" id="volume-unit">mm³</div>
+                              <div class="metric-details">
+                                  <div class="detail-item">
+                                      <span class="detail-label">mL:</span>
+                                      <span class="detail-value" id="volume-mm3">0.00</span>
+                                  </div>
+                                  <div class="detail-item">
+                                      <span class="detail-label">Voxels:</span>
+                                      <span class="detail-value" id="voxel-count">0</span>
+                                  </div>
+                              </div>
+                              <button class="toggle-button" onclick="toggleVolumeUnit()">Toggle Units</button>
+                          </div>
+                          <div class="metric-card">
+                              <div class="metric-title">Surface Area</div>
+                              <div class="metric-value" id="surface-area">0.00</div>
+                              <div class="metric-unit">mm²</div>
+                              <div class="metric-description">Total surface area of ventricle</div>
+                          </div>
+                          <div class="metric-card">
+                              <div class="metric-title">Convexity</div>
+                              <div class="metric-value" id="convexity">1.00</div>
+                              <div class="metric-unit">ratio</div>
+                              <div class="metric-description">Volume ratio (actual/convex hull)</div>
+                          </div>
+                          <div class="metric-card">
+                              <div class="metric-title">Symmetry</div>
+                              <div class="metric-value" id="symmetry">1.00</div>
+                              <div class="metric-unit">score</div>
+                              <div class="metric-description">Symmetry score (0-1, higher = more symmetric)</div>
+                          </div>
+                      </div>
+                 </div>
+                 <div id="metrics-error" class="error-message" style="display: none;">
+                     <p>Error calculating metrics. Please try again.</p>
+                 </div>
+             </div>
+            
+            
+            
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>Generating 3D reconstruction... This may take a moment.</p>
+            </div>
+            
+            <div id="viewer-container" class="viewer-container" style="display: none;">
+                <iframe id="3d-viewer" width="100%" height="100%" frameborder="0"></iframe>
+            </div>
+            
+            <div id="error-container" style="display: none;" class="error-message">
+                <p>Error generating 3D reconstruction. Please try again.</p>
+            </div>
+            
+                         <div class="controls">
+                 <button class="control-button" onclick="resetView()">Reset View</button>
+                 <button class="control-button" onclick="toggleWireframe()">Toggle Wireframe</button>
+                 <button class="control-button" onclick="screenshot()">Take Screenshot</button>
+             </div>
+             
+             <!-- Reconstruction Parameters -->
+             <div class="parameters-section">
+                 <h3>Reconstruction Parameters</h3>
+                 <div class="parameter-controls">
+                     <div class="parameter-group">
+                         <label for="slice-thickness">Slice Thickness Multiplier:</label>
+                         <input type="range" id="slice-thickness" min="0.5" max="8.0" step="0.5" value="1.0">
+                         <span id="thickness-value">1.0x</span>
+                         <small>Adjusts the Z-axis spacing (higher = thicker slices)</small>
+                     </div>
+                     
+                     <div class="parameter-group">
+                         <label for="smoothing-iterations">Smoothing Iterations:</label>
+                         <input type="range" id="smoothing-iterations" min="0" max="100" step="5" value="50">
+                         <span id="smoothing-value">50</span>
+                         <small>Number of Laplacian smoothing iterations (0 = no smoothing)</small>
+                     </div>
+                     
+                     <div class="parameter-group">
+                         <label for="smoothing-factor">Smoothing Factor:</label>
+                         <input type="range" id="smoothing-factor" min="0.01" max="0.5" step="0.01" value="0.1">
+                         <span id="factor-value">0.1</span>
+                         <small>Relaxation factor for smoothing (higher = more aggressive)</small>
+                     </div>
+                     
+                     <div class="parameter-group">
+                         <label for="mesh-color">Mesh Color:</label>
+                         <input type="color" id="mesh-color" value="#0085be">
+                         <small>Choose the color for the 3D reconstruction</small>
+                     </div>
+                 </div>
+                 
+                                   <button class="control-button" onclick="regenerateMesh()" style="background: #28a745; margin-top: 15px;">
+                      Regenerate Mesh
+                  </button>
+             </div>
+        </div>
+        
+        <a href="{{ url_for('show_result', filename=filename) }}" class="back-link">← Back to Results</a>
+    </div>
+
+    <script>
+        const filename = "{{ filename }}";
+        
+        // Parameter values
+        let currentParams = {
+            sliceThickness: 1.0,
+            smoothingIterations: 50,
+            smoothingFactor: 0.1,
+            meshColor: '#0085be'
+        };
+        
+        // Volume display state
+        let volumeData = null;
+        let showingML = false; // true for mL, false for mm³ (changed default to mm³)
+        
+        // Morphology display state
+        let morphologyData = null;
+        
+        // Initialize parameter controls
+        function initializeParameters() {
+            const thicknessSlider = document.getElementById('slice-thickness');
+            const iterationsSlider = document.getElementById('smoothing-iterations');
+            const factorSlider = document.getElementById('smoothing-factor');
+            const colorPicker = document.getElementById('mesh-color');
+            
+            // Update display values
+            thicknessSlider.addEventListener('input', function() {
+                currentParams.sliceThickness = parseFloat(this.value);
+                document.getElementById('thickness-value').textContent = this.value + 'x';
+            });
+            
+            iterationsSlider.addEventListener('input', function() {
+                currentParams.smoothingIterations = parseInt(this.value);
+                document.getElementById('smoothing-value').textContent = this.value;
+            });
+            
+            factorSlider.addEventListener('input', function() {
+                currentParams.smoothingFactor = parseFloat(this.value);
+                document.getElementById('factor-value').textContent = this.value;
+            });
+            
+            colorPicker.addEventListener('change', function() {
+                currentParams.meshColor = this.value;
+                // Update the mesh color in real-time if viewer is loaded
+                updateMeshColor(this.value);
+            });
+        }
+        
+        // Generate 3D reconstruction with parameters
+        async function generate3DReconstruction() {
+            try {
+                console.log('Starting 3D reconstruction for:', filename);
+                console.log('Parameters:', currentParams);
+                
+                const params = new URLSearchParams({
+                    slice_thickness: currentParams.sliceThickness,
+                    smoothing_iterations: currentParams.smoothingIterations,
+                    smoothing_factor: currentParams.smoothingFactor,
+                    mesh_color: currentParams.meshColor
+                });
+                
+                const response = await fetch(`/generate_3d_reconstruction/${filename}?${params}`);
+                console.log('Response status:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Response data:', data);
+                    
+                    if (data.success) {
+                        document.getElementById('loading').style.display = 'none';
+                        document.getElementById('viewer-container').style.display = 'block';
+                        document.getElementById('3d-viewer').src = data.viewer_url;
+                        
+                        // Update volume and morphology info if provided in response
+                        if (data.volume_info) {
+                            volumeData = data.volume_info;
+                            displayVolumeInfo();
+                        }
+                        if (data.morphology_info) {
+                            morphologyData = data.morphology_info;
+                            displayMorphologyInfo();
+                        }
+                    } else {
+                        throw new Error(data.error || 'Failed to generate 3D reconstruction');
+                    }
+                } else {
+                    const errorText = await response.text();
+                    throw new Error(`Server error: ${response.status} - ${errorText}`);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error-container').style.display = 'block';
+                document.getElementById('error-container').innerHTML = 
+                    `<p>Error generating 3D reconstruction: ${error.message}</p>`;
+            }
+        }
+        
+        // Regenerate mesh with new parameters
+        function regenerateMesh() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('viewer-container').style.display = 'none';
+            document.getElementById('error-container').style.display = 'none';
+            generate3DReconstruction();
+        }
+        
+        // Control functions
+        function resetView() {
+            const iframe = document.getElementById('3d-viewer');
+            if (iframe.contentWindow) {
+                iframe.contentWindow.postMessage({action: 'reset'}, '*');
+            }
+        }
+        
+        function toggleWireframe() {
+            const iframe = document.getElementById('3d-viewer');
+            if (iframe.contentWindow) {
+                iframe.contentWindow.postMessage({action: 'wireframe'}, '*');
+            }
+        }
+        
+        function screenshot() {
+            const iframe = document.getElementById('3d-viewer');
+            if (iframe.contentWindow) {
+                iframe.contentWindow.postMessage({action: 'screenshot'}, '*');
+            }
+        }
+        
+        
+        
+        function updateMeshColor(color) {
+            const iframe = document.getElementById('3d-viewer');
+            if (iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                    action: 'updateColor',
+                    color: color
+                }, '*');
+            }
+        }
+        
+        // Load volume and morphology information
+        async function loadVolumeInfo() {
+            try {
+                console.log('Loading volume and morphology info for:', filename);
+                const response = await fetch(`/get_volume_info/${filename}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Volume and morphology data:', data);
+                    
+                    if (data.success) {
+                        volumeData = data.volume_info;
+                        morphologyData = data.morphology_info;
+                        displayVolumeInfo();
+                        displayMorphologyInfo();
+                        document.getElementById('metrics-loading').style.display = 'none';
+                        document.getElementById('metrics-info').style.display = 'flex';
+                    } else {
+                        throw new Error(data.error || 'Failed to calculate metrics');
+                    }
+                } else {
+                    const errorText = await response.text();
+                    throw new Error(`Server error: ${response.status} - ${errorText}`);
+                }
+            } catch (error) {
+                console.error('Metrics error:', error);
+                document.getElementById('metrics-loading').style.display = 'none';
+                document.getElementById('metrics-error').style.display = 'block';
+                document.getElementById('metrics-error').innerHTML = 
+                    `<p>Error calculating metrics: ${error.message}</p>`;
+            }
+        }
+        
+        // Display volume information
+        function displayVolumeInfo() {
+            if (!volumeData) return;
+            
+            const volumeValue = showingML ? volumeData.volume_ml : volumeData.volume_mm3;
+            const volumeUnit = showingML ? 'mL' : 'mm³';
+            
+            document.getElementById('volume-value').textContent = volumeValue.toFixed(2);
+            document.getElementById('volume-unit').textContent = volumeUnit;
+            document.getElementById('volume-mm3').textContent = showingML ? volumeData.volume_mm3.toFixed(2) : volumeData.volume_ml.toFixed(2);
+            document.getElementById('voxel-count').textContent = volumeData.voxel_count.toLocaleString();
+        }
+        
+        // Display morphology information
+        function displayMorphologyInfo() {
+            if (!morphologyData) return;
+            
+            document.getElementById('surface-area').textContent = morphologyData.surface_area_mm2.toFixed(2);
+            document.getElementById('convexity').textContent = morphologyData.convexity.toFixed(3);
+            document.getElementById('symmetry').textContent = morphologyData.symmetry_score.toFixed(3);
+        }
+        
+        // Toggle volume units
+        function toggleVolumeUnit() {
+            showingML = !showingML;
+            displayVolumeInfo();
+        }
+        
+        // Start generation when page loads
+        window.onload = function() {
+            initializeParameters();
+            loadVolumeInfo(); // Load volume first
+            generate3DReconstruction();
+        };
+    </script>
+</body>
+</html>
