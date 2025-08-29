@@ -1,17 +1,16 @@
-setuptools>=65.0
-wheel
-Flask==2.3.3
-torch==2.5.0
-torchvision==0.21.0
-numpy==1.24.3
-nibabel==5.1.0
-scipy==1.11.1
-segmentation-models-pytorch==0.3.3
-Werkzeug==2.3.7
-gunicorn==21.2.0
-scikit-image==0.21.0
-pyvista==0.40.1
+Flask
+torch
+torchvision
+numpy
+nibabel
+scipy
+segmentation-models-pytorch
+Werkzeug
+gunicorn
+scikit-image
+pyvista
 
-matplotlib==3.7.2
+matplotlib
+
 
 
