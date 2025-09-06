@@ -1,7 +1,7 @@
 import os
 from flask import Flask, request, render_template, redirect, url_for, send_from_directory, flash, send_file, jsonify
 from werkzeug.utils import secure_filename
-from model_processing import load_model, run_segmentation_pipeline
+from model_processing import load_model, run_segmentation_pipeline, run_dual_segmentation_pipeline
 import threading
 import uuid
 import time
@@ -19,7 +19,8 @@ import base64
 UPLOAD_FOLDER = 'uploads'
 OUTPUT_FOLDER = 'outputs'
 ALLOWED_EXTENSIONS = {'nii', 'nii.gz'}
-MODEL_WEIGHTS_PATH = os.path.join('model', 'EFB1_e50_best.pth') # Path to your model
+VENTRICLE_MODEL_WEIGHTS_PATH = os.path.join('model', 'EFB1_e50_best.pth') # Path to ventricle model
+INTRACRANIAL_MODEL_WEIGHTS_PATH = os.path.join('model', 'EFB1_WB.pth') # Path to intracranial model
 
 # --- APP SETUP ---
 app = Flask(__name__, static_folder='static')
@@ -32,12 +33,13 @@ app.secret_key = 'super-secret-key' # Change this for production
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 
-# --- LOAD THE MODEL (once, at startup) ---
+# --- LOAD THE MODELS (once, at startup) ---
 # This is critical for performance and stability!
 try:
-    load_model(MODEL_WEIGHTS_PATH)
+    load_model(VENTRICLE_MODEL_WEIGHTS_PATH, model_type="ventricle")
+    load_model(INTRACRANIAL_MODEL_WEIGHTS_PATH, model_type="intracranial")
 except RuntimeError as e:
-    # If the model fails to load, print the error and stop the app.
+    # If the models fail to load, print the error and stop the app.
     print(str(e))
     exit() # This stops the script from continuing.
 
@@ -45,14 +47,14 @@ except RuntimeError as e:
 progress_dict = {}
 
 # --- BACKGROUND SEGMENTATION TASK ---
-def background_segmentation(task_id, input_filepath, output_filepath):
+def background_segmentation(task_id, input_filepath, ventricle_output_filepath, intracranial_output_filepath):
     try:
         progress_dict[task_id] = 10  # Start at 10%
         time.sleep(0.5)  # Simulate initial delay
         # Step 1: Resizing
         progress_dict[task_id] = 30
-        # Actually run the pipeline, but update progress at key steps
-        success, message = run_segmentation_pipeline(input_filepath, output_filepath, progress_callback=lambda p: progress_dict.update({task_id: p}))
+        # Actually run the dual pipeline, but update progress at key steps
+        success, message = run_dual_segmentation_pipeline(input_filepath, ventricle_output_filepath, intracranial_output_filepath, progress_callback=lambda p: progress_dict.update({task_id: p}))
         if success:
             progress_dict[task_id] = 100
         else:
@@ -90,8 +92,10 @@ def upload_and_process():
             # Secure the filename to prevent directory traversal attacks
             filename = secure_filename(file.filename)
             input_filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            output_filename = f"mask_{filename}"
-            output_filepath = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
+            ventricle_output_filename = f"mask_{filename}"
+            intracranial_output_filename = f"intracranial_mask_{filename}"
+            ventricle_output_filepath = os.path.join(app.config['OUTPUT_FOLDER'], ventricle_output_filename)
+            intracranial_output_filepath = os.path.join(app.config['OUTPUT_FOLDER'], intracranial_output_filename)
 
             # Save the uploaded file
             file.save(input_filepath)
@@ -99,10 +103,10 @@ def upload_and_process():
             # Generate a unique task_id
             task_id = str(uuid.uuid4())
             # Start background thread
-            thread = threading.Thread(target=background_segmentation, args=(task_id, input_filepath, output_filepath))
+            thread = threading.Thread(target=background_segmentation, args=(task_id, input_filepath, ventricle_output_filepath, intracranial_output_filepath))
             thread.start()
             # Show progress page
-            return render_template('progress.html', task_id=task_id, output_filename=output_filename)
+            return render_template('progress.html', task_id=task_id, output_filename=ventricle_output_filename)
 
         else:
             flash(f'Invalid file type. Allowed types are: {", ".join(ALLOWED_EXTENSIONS)}')
@@ -391,17 +395,6 @@ def generate_3d_reconstruction(filename):
                     'smoothing_factor': smoothing_factor,
                     'mesh_color': mesh_color
                 }
-            },
-            'volume_info': {
-                'volume_mm3': float(ventricle_volume_mm3),
-                'volume_ml': float(ventricle_volume_mm3 / 1000.0),  # Convert to mL
-                'voxel_count': int(np.sum(binary_data)),
-                'voxel_spacing': [float(v) for v in original_voxel_spacing]
-            },
-            'morphology_info': {
-                'surface_area_mm2': float(surface_area_mm2),
-                'convexity': float(convexity),
-                'symmetry_score': float(symmetry_score)
             }
         })
         
@@ -466,27 +459,43 @@ def test_3d_reconstruction(filename):
 
 @app.route('/get_volume_info/<filename>')
 def get_volume_info(filename):
-    """Get volume information for a segmentation file."""
+    """Get volume information for both ventricle and intracranial segmentation files."""
     try:
-        # Path to the segmentation NIfTI file
-        nii_path = os.path.join(app.config['OUTPUT_FOLDER'], filename)
+        # Path to the ventricle segmentation NIfTI file
+        ventricle_nii_path = os.path.join(app.config['OUTPUT_FOLDER'], filename)
         
-        if not os.path.exists(nii_path):
-            return jsonify({'success': False, 'error': 'Segmentation file not found'})
+        # Path to the intracranial segmentation NIfTI file
+        intracranial_filename = filename.replace('mask_', 'intracranial_mask_')
+        intracranial_nii_path = os.path.join(app.config['OUTPUT_FOLDER'], intracranial_filename)
         
-        # Load the NIfTI file
-        img = nib.load(nii_path)
-        data = img.get_fdata()
+        if not os.path.exists(ventricle_nii_path):
+            return jsonify({'success': False, 'error': 'Ventricle segmentation file not found'})
+        
+        if not os.path.exists(intracranial_nii_path):
+            return jsonify({'success': False, 'error': 'Intracranial segmentation file not found'})
+        
+        # Load the ventricle NIfTI file
+        ventricle_img = nib.load(ventricle_nii_path)
+        ventricle_data = ventricle_img.get_fdata()
+        
+        # Load the intracranial NIfTI file
+        intracranial_img = nib.load(intracranial_nii_path)
+        intracranial_data = intracranial_img.get_fdata()
         
         # Make sure data is binary (ventricle = 1, background = 0)
-        binary_data = (data > 0).astype(np.uint8)
+        ventricle_binary_data = (ventricle_data > 0).astype(np.uint8)
+        intracranial_binary_data = (intracranial_data > 0).astype(np.uint8)
         
-        # Get voxel spacing from NIfTI header
-        voxel_spacing = list(img.header.get_zooms())
+        # Get voxel spacing from NIfTI header (should be the same for both)
+        voxel_spacing = list(ventricle_img.header.get_zooms())
         
-        # Calculate volume
+        # Calculate volumes
         voxel_volume_mm3 = np.prod(voxel_spacing)
-        ventricle_volume_mm3 = np.sum(binary_data) * voxel_volume_mm3
+        ventricle_volume_mm3 = np.sum(ventricle_binary_data) * voxel_volume_mm3
+        intracranial_volume_mm3 = np.sum(intracranial_binary_data) * voxel_volume_mm3
+        
+        # Calculate % Intracranial Space
+        percent_intracranial_space = (ventricle_volume_mm3 / intracranial_volume_mm3 * 100) if intracranial_volume_mm3 > 0 else 0
         
         # Calculate additional morphological metrics
         from scipy import ndimage
@@ -494,7 +503,7 @@ def get_volume_info(filename):
         from scipy.spatial.distance import cdist
         
         # Get ventricle coordinates
-        ventricle_coords = np.where(binary_data > 0)
+        ventricle_coords = np.where(ventricle_binary_data > 0)
         ventricle_coords = np.column_stack(ventricle_coords)
         
         # Calculate surface area (approximate using marching cubes)
@@ -502,7 +511,7 @@ def get_volume_info(filename):
         if len(ventricle_coords) > 0:
             try:
                 # Use marching cubes to get surface mesh for area calculation
-                verts, faces, normals, values = measure.marching_cubes(binary_data, level=0.5, spacing=voxel_spacing)
+                verts, faces, normals, values = measure.marching_cubes(ventricle_binary_data, level=0.5, spacing=voxel_spacing)
                 if len(verts) > 0 and len(faces) > 0:
                     # Calculate area of each triangle face
                     for face in faces:
@@ -580,14 +589,20 @@ def get_volume_info(filename):
             'volume_info': {
                 'volume_mm3': float(ventricle_volume_mm3),
                 'volume_ml': float(ventricle_volume_mm3 / 1000.0),  # Convert to mL
-                'voxel_count': int(np.sum(binary_data)),
+                'voxel_count': int(np.sum(ventricle_binary_data)),
                 'voxel_spacing': [float(v) for v in voxel_spacing],
-                'data_shape': data.shape
+                'data_shape': ventricle_data.shape
+            },
+            'intracranial_info': {
+                'intracranial_volume_mm3': float(intracranial_volume_mm3),
+                'intracranial_volume_ml': float(intracranial_volume_mm3 / 1000.0),
+                'intracranial_voxel_count': int(np.sum(intracranial_binary_data))
             },
             'morphology_info': {
                 'surface_area_mm2': float(surface_area_mm2),
                 'convexity': float(convexity),
-                'symmetry_score': float(symmetry_score)
+                'symmetry_score': float(symmetry_score),
+                'percent_intracranial_space': float(percent_intracranial_space)
             }
         })
         
@@ -597,5 +612,4 @@ def get_volume_info(filename):
 
 
 if __name__ == '__main__':
-
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
