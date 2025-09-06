@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Results - AVA-TAR</title>
+    <style>
+        :root {
+            --primary: #120f3cff;
+            --accent: #4d8addff;
+            --light: #cae7f8ff;
+            --white: #fff;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: var(--white);
+            letter-spacing: 2px;
+            margin-bottom: 0.2em;
+        }
+        .subtitle {
+            font-size: 1rem;
+            color: var(--light);
+            margin-bottom: 1.2em;
+            font-weight: 500;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--white);
+            border-radius: 18px;
+            box-shadow: 0 8px 32px rgba(18,15,60,0.18);
+            padding: 30px;
+        }
+        .success-message {
+            background: #e8f5e8;
+            border: 2px solid #4caf50;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .success-message h2 {
+            color: #2e7d32;
+            margin: 0 0 10px 0;
+            font-size: 1.5rem;
+        }
+        .success-message p {
+            color: #2e7d32;
+            margin: 0;
+            font-size: 1rem;
+        }
+        .download-section {
+            background: linear-gradient(135deg, #ffffff 0%, #e3f2fd 100%);
+            border: 2px solid var(--accent);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+        .download-section h3 {
+            color: var(--primary);
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+        .download-button {
+            background: var(--accent);
+            color: var(--white);
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: background 0.2s;
+            margin: 10px;
+        }
+        .download-button:hover {
+            background: var(--primary);
+        }
+        .download-button.secondary {
+            background: #28a745;
+        }
+        .download-button.secondary:hover {
+            background: #218838;
+        }
+        .info-section {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(77, 138, 221, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .info-section h4 {
+            color: var(--primary);
+            margin: 0 0 15px 0;
+            font-size: 1.1rem;
+        }
+        .info-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .info-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(77, 138, 221, 0.2);
+            color: var(--primary);
+        }
+        .info-list li:last-child {
+            border-bottom: none;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: var(--accent);
+            font-weight: 500;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .back-link:hover {
+            color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">AVA-TAR</div>
+        <div class="subtitle">Automated Ventricle Assessment via Three-dimensional Anatomical Reconstruction</div>
+    </div>
+    
+    <div class="container">
+        <div class="success-message">
+            <h2>Batch Processing Complete!</h2>
+            <p>All files have been successfully processed. Your results are ready for download.</p>
+        </div>
+        
+        <div class="download-section">
+            <h3>Download Results</h3>
+            <p>Your batch processing results include:</p>
+            <ul style="text-align: left; max-width: 500px; margin: 0 auto;">
+                <li>• Ventricle segmentation masks</li>
+                <li>• Intracranial space segmentation masks</li>
+                <li>• CSV report with volume and morphological quantifications</li>
+            </ul>
+            <br>
+            <a href="{{ url_for('download_batch', batch_id=batch_id) }}" class="download-button">
+                Download All Results (ZIP)
+            </a>
+        </div>
+        
+        <div class="info-section">
+            <h4>What's included in your download:</h4>
+            <ul class="info-list">
+                <li><strong>ventricle_masks/</strong> - Folder containing all ventricle segmentation masks</li>
+                <li><strong>intracranial_masks/</strong> - Folder containing all intracranial space masks</li>
+                <li><strong>batch_results.csv</strong> - Spreadsheet with volume measurements, morphological metrics, and % intracranial space for each file</li>
+            </ul>
+        </div>
+        
+        <div class="info-section">
+            <h4>CSV Report Columns:</h4>
+            <ul class="info-list">
+                <li><strong>filename</strong> - Original file name</li>
+                <li><strong>success</strong> - Whether processing was successful</li>
+                <li><strong>ventricle_volume_mm3</strong> - Ventricle volume in cubic millimeters</li>
+                <li><strong>ventricle_volume_ml</strong> - Ventricle volume in milliliters</li>
+                <li><strong>intracranial_volume_mm3</strong> - Intracranial space volume in cubic millimeters</li>
+                <li><strong>intracranial_volume_ml</strong> - Intracranial space volume in milliliters</li>
+                <li><strong>percent_intracranial_space</strong> - Ventricle volume as % of intracranial space</li>
+                <li><strong>surface_area_mm2</strong> - Total surface area of ventricle in square millimeters</li>
+                <li><strong>convexity</strong> - Volume ratio (actual/convex hull), higher = more convex</li>
+                <li><strong>symmetry_score</strong> - Symmetry score (0-1), higher = more symmetric</li>
+                <li><strong>error_message</strong> - Error details if processing failed</li>
+            </ul>
+        </div>
+        
+        <a href="{{ url_for('upload_and_process') }}" class="back-link">← Process More Files</a>
+    </div>
+</body>
+</html>

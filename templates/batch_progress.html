@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Processing - AVA-TAR</title>
+    <style>
+        :root {
+            --primary: #120f3cff;
+            --accent: #4d8addff;
+            --light: #cae7f8ff;
+            --white: #fff;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card {
+            background: var(--white);
+            border-radius: 18px;
+            box-shadow: 0 8px 32px rgba(18,15,60,0.18);
+            padding: 40px 32px 32px 32px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        .logo {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: var(--primary);
+            letter-spacing: 2px;
+            margin-bottom: 0.2em;
+        }
+        .subtitle {
+            font-size: 1rem;
+            color: var(--accent);
+            margin-bottom: 1.2em;
+            font-weight: 500;
+        }
+        .progress-info {
+            margin: 20px 0;
+            color: var(--primary);
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: var(--light);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--primary));
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .progress-text {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 10px 0;
+        }
+        .file-count {
+            font-size: 0.9rem;
+            color: var(--primary);
+            margin-bottom: 20px;
+        }
+        .spinner {
+            border: 6px solid var(--light);
+            border-top: 6px solid var(--accent);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error-message {
+            color: #b30000;
+            background: #ffe6e6;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #ffcccc;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">AVA-TAR</div>
+        <div class="subtitle">Batch Processing</div>
+        
+        <div class="progress-info">
+            <div class="spinner"></div>
+            <div class="progress-text">Processing {{ num_files }} files...</div>
+            <div class="file-count">This may take several minutes depending on the number of files.</div>
+        </div>
+        
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        
+        <div class="progress-text" id="progress-percent">0%</div>
+        
+        <div id="error-container" class="error-message" style="display: none;">
+            <p>Error processing batch. Please try again.</p>
+        </div>
+    </div>
+
+    <script>
+        const taskId = "{{ task_id }}";
+        const batchId = "{{ batch_id }}";
+        
+        function checkProgress() {
+            fetch(`/progress/${taskId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const progress = data.progress;
+                    
+                    if (progress === -1) {
+                        // Error occurred
+                        document.querySelector('.spinner').style.display = 'none';
+                        document.getElementById('error-container').style.display = 'block';
+                        return;
+                    }
+                    
+                    if (progress >= 100) {
+                        // Processing complete
+                        window.location.href = `/batch_result/${batchId}`;
+                        return;
+                    }
+                    
+                    // Update progress bar
+                    document.getElementById('progress-fill').style.width = progress + '%';
+                    document.getElementById('progress-percent').textContent = progress + '%';
+                })
+                .catch(error => {
+                    console.error('Error checking progress:', error);
+                    document.querySelector('.spinner').style.display = 'none';
+                    document.getElementById('error-container').style.display = 'block';
+                });
+        }
+        
+        // Check progress every 2 seconds
+        setInterval(checkProgress, 2000);
+        
+        // Initial check
+        checkProgress();
+    </script>
+</body>
+</html>
