@@ -7,40 +7,70 @@ import segmentation_models_pytorch as smp
 import torchvision.transforms.functional as TF
 from torchvision.transforms.functional import InterpolationMode
 
-# --- Global variable to hold the model ---
-# This prevents reloading the model on every request, which is very slow.
-MODEL = None
+# --- Global variables to hold the models ---
+# This prevents reloading the models on every request, which is very slow.
+VENTRICLE_MODEL = None
+INTRACRANIAL_MODEL = None
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def load_model(model_weights_path):
+def load_model(model_weights_path, model_type="ventricle"):
     """
     Loads the segmentation model into a global variable.
     This function is called once when the Flask app starts.
     It will raise a RuntimeError if loading fails.
+    
+    Args:
+        model_weights_path: Path to the model weights file
+        model_type: Type of model to load ("ventricle" or "intracranial")
     """
-    global MODEL
-    if MODEL is None:
-        print(f"Loading model from {model_weights_path} onto {DEVICE}...")
+    global VENTRICLE_MODEL, INTRACRANIAL_MODEL
+    
+    if model_type == "ventricle" and VENTRICLE_MODEL is None:
+        print(f"Loading ventricle model from {model_weights_path} onto {DEVICE}...")
         try:
             # Check if the model file exists before trying to load it
             if not os.path.exists(model_weights_path):
                 raise FileNotFoundError(f"Model weights file not found at: {model_weights_path}")
 
-            MODEL = smp.UnetPlusPlus(
+            VENTRICLE_MODEL = smp.UnetPlusPlus(
                 encoder_name="efficientnet-b1",
                 encoder_weights=None,
                 in_channels=5,
                 classes=1,
             ).to(DEVICE)
-            MODEL.load_state_dict(torch.load(model_weights_path, map_location=DEVICE, weights_only=False))
-            MODEL.eval()  # Set model to evaluation mode
-            print("✅ Model loaded successfully.")
+            # Using weights_only=False for compatibility with models saved with older PyTorch versions
+            VENTRICLE_MODEL.load_state_dict(torch.load(model_weights_path, map_location=DEVICE, weights_only=False))
+            VENTRICLE_MODEL.eval()  # Set model to evaluation mode
+            print("✅ Ventricle model loaded successfully.")
         except Exception as e:
             # Raise the exception to halt the application startup
-            MODEL = None
+            VENTRICLE_MODEL = None
             raise RuntimeError(
-                f"❌ CRITICAL ERROR: Could not load model. Please check the path and file integrity. Original error: {e}")
+                f"❌ CRITICAL ERROR: Could not load ventricle model. Please check the path and file integrity. Original error: {e}")
+    
+    elif model_type == "intracranial" and INTRACRANIAL_MODEL is None:
+        print(f"Loading intracranial model from {model_weights_path} onto {DEVICE}...")
+        try:
+            # Check if the model file exists before trying to load it
+            if not os.path.exists(model_weights_path):
+                raise FileNotFoundError(f"Model weights file not found at: {model_weights_path}")
+
+            INTRACRANIAL_MODEL = smp.UnetPlusPlus(
+                encoder_name="efficientnet-b1",
+                encoder_weights=None,
+                in_channels=5,
+                classes=1,
+            ).to(DEVICE)
+            # Using weights_only=False for compatibility with models saved with older PyTorch versions
+            INTRACRANIAL_MODEL.load_state_dict(torch.load(model_weights_path, map_location=DEVICE, weights_only=False))
+            INTRACRANIAL_MODEL.eval()  # Set model to evaluation mode
+            print("✅ Intracranial model loaded successfully.")
+        except Exception as e:
+            # Raise the exception to halt the application startup
+            INTRACRANIAL_MODEL = None
+            raise RuntimeError(
+                f"❌ CRITICAL ERROR: Could not load intracranial model. Please check the path and file integrity. Original error: {e}")
 
 def _resize_nifti(input_path, output_path, target_shape=(192, 192)):
     """
@@ -68,13 +98,26 @@ def _resize_nifti(input_path, output_path, target_shape=(192, 192)):
         print(f"❌ ERROR resizing {os.path.basename(input_path)}: {e}")
         return False
 
-def _segment_nifti(input_path, output_path, progress_callback=None):
+def _segment_nifti(input_path, output_path, model_type="ventricle", progress_callback=None):
     """
     Internal function to apply segmentation to a preprocessed NIfTI file.
     Accepts an optional progress_callback(percent:int) for reporting progress.
+    
+    Args:
+        input_path: Path to the input NIfTI file
+        output_path: Path to save the output segmentation
+        model_type: Type of model to use ("ventricle" or "intracranial")
+        progress_callback: Optional callback function for progress updates
     """
-    if MODEL is None:
-        raise RuntimeError("Model is not loaded. Please call load_model() first.")
+    global VENTRICLE_MODEL, INTRACRANIAL_MODEL
+    
+    if model_type == "ventricle" and VENTRICLE_MODEL is None:
+        raise RuntimeError("Ventricle model is not loaded. Please call load_model() first.")
+    elif model_type == "intracranial" and INTRACRANIAL_MODEL is None:
+        raise RuntimeError("Intracranial model is not loaded. Please call load_model() first.")
+    
+    # Select the appropriate model
+    model = VENTRICLE_MODEL if model_type == "ventricle" else INTRACRANIAL_MODEL
 
     try:
         nifti_img = nib.load(input_path)
@@ -104,7 +147,7 @@ def _segment_nifti(input_path, output_path, progress_callback=None):
             input_tensor = img_tensor_resized.unsqueeze(0).to(DEVICE)
 
             with torch.no_grad():
-                output_logits = MODEL(input_tensor)
+                output_logits = model(input_tensor)
 
             pred_mask = (torch.sigmoid(output_logits) > 0.5).float()
             pred_mask_resized = TF.resize(pred_mask, (img_3d_data.shape[0], img_3d_data.shape[1]), interpolation=InterpolationMode.NEAREST)
@@ -142,10 +185,16 @@ def _resize_mask_to_original(mask_path, output_path, original_shape, original_af
         print(f"❌ ERROR resizing mask to original shape: {e}")
         return False
 
-def run_segmentation_pipeline(input_filepath, output_filepath, progress_callback=None):
+def run_segmentation_pipeline(input_filepath, output_filepath, model_type="ventricle", progress_callback=None):
     """
     Orchestrates the full preprocessing and segmentation pipeline.
     Accepts an optional progress_callback(percent:int) for reporting progress.
+    
+    Args:
+        input_filepath: Path to the input NIfTI file
+        output_filepath: Path to save the output segmentation
+        model_type: Type of model to use ("ventricle" or "intracranial")
+        progress_callback: Optional callback function for progress updates
     """
     temp_dir = os.path.dirname(input_filepath)
     filename = os.path.basename(input_filepath)
@@ -160,7 +209,7 @@ def run_segmentation_pipeline(input_filepath, output_filepath, progress_callback
         if progress_callback: progress_callback(-1)
         return False, "Failed during the resizing step."
     # --- Pass progress_callback to segmentation step ---
-    if not _segment_nifti(intermediate_resized_path, intermediate_mask_path, progress_callback=progress_callback):
+    if not _segment_nifti(intermediate_resized_path, intermediate_mask_path, model_type=model_type, progress_callback=progress_callback):
         if os.path.exists(intermediate_resized_path):
             os.remove(intermediate_resized_path)
         if progress_callback: progress_callback(-1)
@@ -178,6 +227,35 @@ def run_segmentation_pipeline(input_filepath, output_filepath, progress_callback
     if os.path.exists(intermediate_mask_path):
         os.remove(intermediate_mask_path)
     if progress_callback: progress_callback(100)
-
     return True, "Segmentation successful."
 
+def run_dual_segmentation_pipeline(input_filepath, ventricle_output_filepath, intracranial_output_filepath, progress_callback=None):
+    """
+    Orchestrates the full preprocessing and dual segmentation pipeline for both ventricle and intracranial space.
+    Accepts an optional progress_callback(percent:int) for reporting progress.
+    
+    Args:
+        input_filepath: Path to the input NIfTI file
+        ventricle_output_filepath: Path to save the ventricle segmentation
+        intracranial_output_filepath: Path to save the intracranial segmentation
+        progress_callback: Optional callback function for progress updates
+    """
+    # Run ventricle segmentation (0-50% progress)
+    def ventricle_progress_callback(progress):
+        if progress_callback:
+            progress_callback(int(progress * 0.5))  # Scale to 0-50%
+    
+    success, message = run_segmentation_pipeline(input_filepath, ventricle_output_filepath, model_type="ventricle", progress_callback=ventricle_progress_callback)
+    if not success:
+        return False, f"Ventricle segmentation failed: {message}"
+    
+    # Run intracranial segmentation (50-100% progress)
+    def intracranial_progress_callback(progress):
+        if progress_callback:
+            progress_callback(50 + int(progress * 0.5))  # Scale to 50-100%
+    
+    success, message = run_segmentation_pipeline(input_filepath, intracranial_output_filepath, model_type="intracranial", progress_callback=intracranial_progress_callback)
+    if not success:
+        return False, f"Intracranial segmentation failed: {message}"
+    
+    return True, "Dual segmentation successful."
