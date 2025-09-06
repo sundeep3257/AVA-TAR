@@ -14,6 +14,9 @@ from skimage import measure
 import pyvista as pv
 import tempfile
 import base64
+import csv
+import zipfile
+from datetime import datetime
 
 # --- CONFIGURATION ---
 UPLOAD_FOLDER = 'uploads'
@@ -62,6 +65,243 @@ def background_segmentation(task_id, input_filepath, ventricle_output_filepath, 
     except Exception as e:
         progress_dict[task_id] = -1
 
+# --- BATCH PROCESSING TASK ---
+def background_batch_processing(task_id, file_paths, batch_output_dir):
+    try:
+        total_files = len(file_paths)
+        results = []
+        
+        for i, (input_filepath, ventricle_output_filepath, intracranial_output_filepath) in enumerate(file_paths):
+            # Update progress for current file
+            file_progress = int((i / total_files) * 100)
+            progress_dict[task_id] = file_progress
+            
+            # Process the file
+            success, message = run_dual_segmentation_pipeline(
+                input_filepath, 
+                ventricle_output_filepath, 
+                intracranial_output_filepath
+            )
+            
+            if success:
+                # Calculate metrics for this file
+                metrics = calculate_file_metrics(ventricle_output_filepath, intracranial_output_filepath)
+                results.append({
+                    'filename': os.path.basename(input_filepath),
+                    'success': True,
+                    'metrics': metrics
+                })
+            else:
+                results.append({
+                    'filename': os.path.basename(input_filepath),
+                    'success': False,
+                    'error': message
+                })
+        
+        # Generate CSV report
+        csv_path = os.path.join(batch_output_dir, 'batch_results.csv')
+        generate_csv_report(results, csv_path)
+        
+        # Create zip file
+        zip_path = os.path.join(batch_output_dir, 'batch_results.zip')
+        create_batch_zip(batch_output_dir, zip_path, results)
+        
+        progress_dict[task_id] = 100
+        
+    except Exception as e:
+        progress_dict[task_id] = -1
+        print(f"Batch processing error: {str(e)}")
+
+def calculate_file_metrics(ventricle_path, intracranial_path):
+    """Calculate metrics for a single file."""
+    try:
+        # Load ventricle data
+        ventricle_img = nib.load(ventricle_path)
+        ventricle_data = ventricle_img.get_fdata()
+        ventricle_binary = (ventricle_data > 0).astype(np.uint8)
+        
+        # Load intracranial data
+        intracranial_img = nib.load(intracranial_path)
+        intracranial_data = intracranial_img.get_fdata()
+        intracranial_binary = (intracranial_data > 0).astype(np.uint8)
+        
+        # Get voxel spacing
+        voxel_spacing = list(ventricle_img.header.get_zooms())
+        voxel_volume_mm3 = np.prod(voxel_spacing)
+        
+        # Calculate volumes
+        ventricle_volume_mm3 = np.sum(ventricle_binary) * voxel_volume_mm3
+        intracranial_volume_mm3 = np.sum(intracranial_binary) * voxel_volume_mm3
+        
+        # Calculate percentage
+        percent_intracranial = (ventricle_volume_mm3 / intracranial_volume_mm3 * 100) if intracranial_volume_mm3 > 0 else 0
+        
+        # Calculate morphological metrics
+        from scipy import ndimage
+        from scipy.spatial import ConvexHull
+        
+        # Get ventricle coordinates
+        ventricle_coords = np.where(ventricle_binary > 0)
+        ventricle_coords = np.column_stack(ventricle_coords)
+        
+        # Calculate surface area using marching cubes
+        surface_area_mm2 = 0
+        if len(ventricle_coords) > 0:
+            try:
+                verts, faces, normals, values = measure.marching_cubes(ventricle_binary, level=0.5, spacing=voxel_spacing)
+                if len(verts) > 0 and len(faces) > 0:
+                    # Calculate area of each triangle face
+                    for face in faces:
+                        v1, v2, v3 = verts[face]
+                        # Calculate triangle area using cross product
+                        edge1 = v2 - v1
+                        edge2 = v3 - v1
+                        cross_product = np.cross(edge1, edge2)
+                        triangle_area = 0.5 * np.linalg.norm(cross_product)
+                        surface_area_mm2 += triangle_area
+            except Exception as e:
+                print(f"Warning: Surface area calculation failed: {str(e)}")
+                surface_area_mm2 = 0
+        
+        # Calculate convexity (volume ratio of convex hull to actual volume)
+        convexity = 1.0
+        if len(ventricle_coords) > 4:  # Need at least 4 points for 3D convex hull
+            try:
+                # Scale coordinates by voxel spacing for accurate measurements
+                scaled_coords = ventricle_coords * np.array(voxel_spacing)
+                hull = ConvexHull(scaled_coords)
+                convex_hull_volume = hull.volume
+                convexity = ventricle_volume_mm3 / convex_hull_volume if convex_hull_volume > 0 else 1.0
+            except Exception as e:
+                print(f"Warning: Convexity calculation failed: {str(e)}")
+                convexity = 1.0
+        
+        # Calculate symmetry (using center of mass and moment of inertia)
+        symmetry_score = 1.0
+        if len(ventricle_coords) > 0:
+            try:
+                # Calculate center of mass
+                center_of_mass = np.mean(ventricle_coords, axis=0)
+                
+                # Calculate moment of inertia tensor
+                centered_coords = ventricle_coords - center_of_mass
+                inertia_tensor = np.zeros((3, 3))
+                
+                for coord in centered_coords:
+                    x, y, z = coord
+                    inertia_tensor[0, 0] += y*y + z*z
+                    inertia_tensor[1, 1] += x*x + z*z
+                    inertia_tensor[2, 2] += x*x + y*y
+                    inertia_tensor[0, 1] -= x*y
+                    inertia_tensor[0, 2] -= x*z
+                    inertia_tensor[1, 2] -= y*z
+                
+                # Make tensor symmetric
+                inertia_tensor[1, 0] = inertia_tensor[0, 1]
+                inertia_tensor[2, 0] = inertia_tensor[0, 2]
+                inertia_tensor[2, 1] = inertia_tensor[1, 2]
+                
+                # Calculate eigenvalues (principal moments of inertia)
+                eigenvalues = np.linalg.eigvals(inertia_tensor)
+                eigenvalues = np.real(eigenvalues)  # Remove imaginary parts
+                eigenvalues = np.sort(eigenvalues)[::-1]  # Sort in descending order
+                
+                # Calculate symmetry score based on eigenvalue ratios
+                if eigenvalues[0] > 0:
+                    # Normalize by the largest eigenvalue
+                    normalized_eigenvalues = eigenvalues / eigenvalues[0]
+                    # Symmetry score: how close the eigenvalues are to each other
+                    # Perfect symmetry would have all eigenvalues equal
+                    symmetry_score = 1.0 - np.std(normalized_eigenvalues)
+                    symmetry_score = max(0.0, min(1.0, symmetry_score))  # Clamp to [0, 1]
+                else:
+                    symmetry_score = 1.0
+                    
+            except Exception as e:
+                print(f"Warning: Symmetry calculation failed: {str(e)}")
+                symmetry_score = 1.0
+        
+        return {
+            'ventricle_volume_mm3': float(ventricle_volume_mm3),
+            'ventricle_volume_ml': float(ventricle_volume_mm3 / 1000.0),
+            'intracranial_volume_mm3': float(intracranial_volume_mm3),
+            'intracranial_volume_ml': float(intracranial_volume_mm3 / 1000.0),
+            'percent_intracranial_space': float(percent_intracranial),
+            'surface_area_mm2': float(surface_area_mm2),
+            'convexity': float(convexity),
+            'symmetry_score': float(symmetry_score),
+            'voxel_spacing': voxel_spacing
+        }
+    except Exception as e:
+        return {'error': str(e)}
+
+def generate_csv_report(results, csv_path):
+    """Generate CSV report from batch processing results."""
+    with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+        fieldnames = [
+            'filename', 'success', 'ventricle_volume_mm3', 'ventricle_volume_ml',
+            'intracranial_volume_mm3', 'intracranial_volume_ml', 'percent_intracranial_space',
+            'surface_area_mm2', 'convexity', 'symmetry_score', 'error_message'
+        ]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        
+        for result in results:
+            row = {
+                'filename': result['filename'],
+                'success': result['success'],
+                'error_message': result.get('error', '')
+            }
+            
+            if result['success'] and 'metrics' in result:
+                metrics = result['metrics']
+                row.update({
+                    'ventricle_volume_mm3': metrics.get('ventricle_volume_mm3', 0),
+                    'ventricle_volume_ml': metrics.get('ventricle_volume_ml', 0),
+                    'intracranial_volume_mm3': metrics.get('intracranial_volume_mm3', 0),
+                    'intracranial_volume_ml': metrics.get('intracranial_volume_ml', 0),
+                    'percent_intracranial_space': metrics.get('percent_intracranial_space', 0),
+                    'surface_area_mm2': metrics.get('surface_area_mm2', 0),
+                    'convexity': metrics.get('convexity', 0),
+                    'symmetry_score': metrics.get('symmetry_score', 0)
+                })
+            else:
+                row.update({
+                    'ventricle_volume_mm3': 0,
+                    'ventricle_volume_ml': 0,
+                    'intracranial_volume_mm3': 0,
+                    'intracranial_volume_ml': 0,
+                    'percent_intracranial_space': 0,
+                    'surface_area_mm2': 0,
+                    'convexity': 0,
+                    'symmetry_score': 0
+                })
+            
+            writer.writerow(row)
+
+def create_batch_zip(batch_output_dir, zip_path, results):
+    """Create zip file containing all outputs and CSV report."""
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        # Add CSV report
+        csv_path = os.path.join(batch_output_dir, 'batch_results.csv')
+        if os.path.exists(csv_path):
+            zipf.write(csv_path, 'batch_results.csv')
+        
+        # Add segmentation files
+        for result in results:
+            if result['success']:
+                filename = result['filename']
+                ventricle_mask = f"mask_{filename}"
+                intracranial_mask = f"intracranial_mask_{filename}"
+                
+                ventricle_path = os.path.join(batch_output_dir, ventricle_mask)
+                intracranial_path = os.path.join(batch_output_dir, intracranial_mask)
+                
+                if os.path.exists(ventricle_path):
+                    zipf.write(ventricle_path, f"ventricle_masks/{ventricle_mask}")
+                if os.path.exists(intracranial_path):
+                    zipf.write(intracranial_path, f"intracranial_masks/{intracranial_mask}")
+
 @app.route('/progress/<task_id>')
 def progress(task_id):
     prog = progress_dict.get(task_id, 0)
@@ -76,41 +316,92 @@ def allowed_file(filename):
 @app.route('/', methods=['GET', 'POST'])
 def upload_and_process():
     if request.method == 'POST':
-        # Check if the post request has the file part
-        if 'file' not in request.files:
-            flash('No file part in the request.')
-            return redirect(request.url)
-        file = request.files['file']
-
-        # If the user does not select a file, the browser submits an empty file without a filename.
-        if file.filename == '':
-            flash('No file selected.')
-            return redirect(request.url)
-
-        # If the file is valid, process it
-        if file and allowed_file(file.filename):
-            # Secure the filename to prevent directory traversal attacks
-            filename = secure_filename(file.filename)
-            input_filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            ventricle_output_filename = f"mask_{filename}"
-            intracranial_output_filename = f"intracranial_mask_{filename}"
-            ventricle_output_filepath = os.path.join(app.config['OUTPUT_FOLDER'], ventricle_output_filename)
-            intracranial_output_filepath = os.path.join(app.config['OUTPUT_FOLDER'], intracranial_output_filename)
-
-            # Save the uploaded file
-            file.save(input_filepath)
-
+        batch_mode = request.form.get('batch_mode', 'false') == 'true'
+        
+        if batch_mode:
+            # Handle batch processing
+            if 'files[]' not in request.files:
+                flash('No files part in the request.')
+                return redirect(request.url)
+            
+            files = request.files.getlist('files[]')
+            
+            if not files or all(file.filename == '' for file in files):
+                flash('No files selected.')
+                return redirect(request.url)
+            
+            # Validate all files
+            valid_files = []
+            for file in files:
+                if file and allowed_file(file.filename):
+                    valid_files.append(file)
+                else:
+                    flash(f'Invalid file type: {file.filename}. Allowed types are: {", ".join(ALLOWED_EXTENSIONS)}')
+            
+            if not valid_files:
+                return redirect(request.url)
+            
+            # Create batch output directory
+            batch_id = str(uuid.uuid4())
+            batch_output_dir = os.path.join(app.config['OUTPUT_FOLDER'], f'batch_{batch_id}')
+            os.makedirs(batch_output_dir, exist_ok=True)
+            
+            # Prepare file paths for batch processing
+            file_paths = []
+            for file in valid_files:
+                filename = secure_filename(file.filename)
+                input_filepath = os.path.join(batch_output_dir, filename)
+                ventricle_output_filepath = os.path.join(batch_output_dir, f"mask_{filename}")
+                intracranial_output_filepath = os.path.join(batch_output_dir, f"intracranial_mask_{filename}")
+                
+                # Save the uploaded file
+                file.save(input_filepath)
+                file_paths.append((input_filepath, ventricle_output_filepath, intracranial_output_filepath))
+            
             # Generate a unique task_id
             task_id = str(uuid.uuid4())
-            # Start background thread
-            thread = threading.Thread(target=background_segmentation, args=(task_id, input_filepath, ventricle_output_filepath, intracranial_output_filepath))
+            # Start background batch processing thread
+            thread = threading.Thread(target=background_batch_processing, args=(task_id, file_paths, batch_output_dir))
             thread.start()
-            # Show progress page
-            return render_template('progress.html', task_id=task_id, output_filename=ventricle_output_filename)
-
+            # Show batch progress page
+            return render_template('batch_progress.html', task_id=task_id, batch_id=batch_id, num_files=len(valid_files))
+        
         else:
-            flash(f'Invalid file type. Allowed types are: {", ".join(ALLOWED_EXTENSIONS)}')
-            return redirect(request.url)
+            # Handle single file processing
+            if 'file' not in request.files:
+                flash('No file part in the request.')
+                return redirect(request.url)
+            file = request.files['file']
+
+            # If the user does not select a file, the browser submits an empty file without a filename.
+            if file.filename == '':
+                flash('No file selected.')
+                return redirect(request.url)
+
+            # If the file is valid, process it
+            if file and allowed_file(file.filename):
+                # Secure the filename to prevent directory traversal attacks
+                filename = secure_filename(file.filename)
+                input_filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                ventricle_output_filename = f"mask_{filename}"
+                intracranial_output_filename = f"intracranial_mask_{filename}"
+                ventricle_output_filepath = os.path.join(app.config['OUTPUT_FOLDER'], ventricle_output_filename)
+                intracranial_output_filepath = os.path.join(app.config['OUTPUT_FOLDER'], intracranial_output_filename)
+
+                # Save the uploaded file
+                file.save(input_filepath)
+
+                # Generate a unique task_id
+                task_id = str(uuid.uuid4())
+                # Start background thread
+                thread = threading.Thread(target=background_segmentation, args=(task_id, input_filepath, ventricle_output_filepath, intracranial_output_filepath))
+                thread.start()
+                # Show progress page
+                return render_template('progress.html', task_id=task_id, output_filename=ventricle_output_filename)
+
+            else:
+                flash(f'Invalid file type. Allowed types are: {", ".join(ALLOWED_EXTENSIONS)}')
+                return redirect(request.url)
 
     # For a GET request, just show the upload page
     return render_template('index.html')
@@ -119,6 +410,23 @@ def upload_and_process():
 def show_result(filename):
     """Displays the page with the download link."""
     return render_template('result.html', filename=filename)
+
+@app.route('/batch_result/<batch_id>')
+def show_batch_result(batch_id):
+    """Displays the batch results page with download link."""
+    return render_template('batch_result.html', batch_id=batch_id)
+
+@app.route('/download_batch/<batch_id>')
+def download_batch(batch_id):
+    """Serves the batch results zip file for download."""
+    batch_output_dir = os.path.join(app.config['OUTPUT_FOLDER'], f'batch_{batch_id}')
+    zip_path = os.path.join(batch_output_dir, 'batch_results.zip')
+    
+    if os.path.exists(zip_path):
+        return send_file(zip_path, as_attachment=True, download_name=f'batch_results_{batch_id}.zip')
+    else:
+        flash('Batch results not found.')
+        return redirect(url_for('upload_and_process'))
 
 
 @app.route('/download/<filename>')
