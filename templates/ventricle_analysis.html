@@ -418,6 +418,12 @@
                               <div class="metric-unit">score</div>
                               <div class="metric-description">Symmetry score (0-1, higher = more symmetric)</div>
                           </div>
+                          <div class="metric-card">
+                              <div class="metric-title">% Intracranial Space</div>
+                              <div class="metric-value" id="percent-intracranial">0.00</div>
+                              <div class="metric-unit">%</div>
+                              <div class="metric-description">Ventricle volume as percentage of intracranial space</div>
+                          </div>
                       </div>
                  </div>
                  <div id="metrics-error" class="error-message" style="display: none;">
@@ -504,6 +510,7 @@
         
         // Morphology display state
         let morphologyData = null;
+        let intracranialData = null;
         
         // Initialize parameter controls
         function initializeParameters() {
@@ -560,15 +567,8 @@
                         document.getElementById('viewer-container').style.display = 'block';
                         document.getElementById('3d-viewer').src = data.viewer_url;
                         
-                        // Update volume and morphology info if provided in response
-                        if (data.volume_info) {
-                            volumeData = data.volume_info;
-                            displayVolumeInfo();
-                        }
-                        if (data.morphology_info) {
-                            morphologyData = data.morphology_info;
-                            displayMorphologyInfo();
-                        }
+                        // Note: Volume and morphology info are loaded separately via loadVolumeInfo()
+                        // The 3D reconstruction only provides mesh data
                     } else {
                         throw new Error(data.error || 'Failed to generate 3D reconstruction');
                     }
@@ -640,6 +640,7 @@
                     if (data.success) {
                         volumeData = data.volume_info;
                         morphologyData = data.morphology_info;
+                        intracranialData = data.intracranial_info;
                         displayVolumeInfo();
                         displayMorphologyInfo();
                         document.getElementById('metrics-loading').style.display = 'none';
@@ -680,6 +681,7 @@
             document.getElementById('surface-area').textContent = morphologyData.surface_area_mm2.toFixed(2);
             document.getElementById('convexity').textContent = morphologyData.convexity.toFixed(3);
             document.getElementById('symmetry').textContent = morphologyData.symmetry_score.toFixed(3);
+            document.getElementById('percent-intracranial').textContent = morphologyData.percent_intracranial_space.toFixed(2);
         }
         
         // Toggle volume units
