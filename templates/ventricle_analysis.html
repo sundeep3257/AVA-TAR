@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ventricle Analysis - AVA-TAR</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <link rel="shortcut icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
     <style>
         :root {
             --primary: #120f3cff;
@@ -143,10 +145,10 @@
          }
         
                  .parameter-controls {
-             display: flex;
-             flex-direction: column;
+             display: grid;
+             grid-template-columns: 1fr 1fr;
              gap: 20px;
-             max-width: 600px;
+             max-width: 800px;
              margin: 0 auto;
          }
         
@@ -173,6 +175,7 @@
             background: #ddd;
             outline: none;
             -webkit-appearance: none;
+            appearance: none;
         }
         
         .parameter-group input[type="range"]::-webkit-slider-thumb {
@@ -262,7 +265,7 @@
         
         .metrics-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(5, 1fr);
             gap: 20px;
             width: 100%;
             max-width: 1000px;
@@ -361,6 +364,29 @@
         
         .toggle-button:hover {
             background: var(--primary);
+        }
+        
+        /* Responsive design for smaller screens */
+        @media (max-width: 1200px) {
+            .metrics-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .parameter-controls {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
